@@ -1,0 +1,160 @@
+#This repository will contain all notes. Not much coding going on here.
+
+Brief overview of the boot process:
+1) The systems BIOS or boot fireware loads and run a boot loader
+2) The boot loader finds the kernel image on disk, loads into, memory, and starts it (GRUB)
+3) kernel initilizes the devices and its drivers
+4) The kernel mounts the root filesystem.
+5) The kernel started a program called init with PID of 1.
+6) init sets the rest of the system processes in mothin
+7) At some point, Init starts a process allowing you to login, usually near the end or near end of booting.
+
+Kernel Initilzation:
+1) CPU inspection
+2) memory inspection
+3) Device bus discovery
+4) Device discovery
+5) Aux kenrl subsystem start up - networking etc
+6) Root file system mount
+7) user space
+
+
+#### Intro to boot loaders
+
+The boot loader's core functionality includes the ability to do the following
+- Select amount multiple kernels
+- Switch between sets of kernel parms
+- Allow user to manually override and edit kernel image names and parameters - something like going into single user mode
+- Provide support for booting other operation systems
+
+
+
+#Introducing GRUB
+
+New version of GRUB is GRUB2. 
+Grub loads the kernel - simplified.
+
+#### I have labled the GRUB menu because I am crazy like that and I LOVE context. Check via linkedin https://www.linkedin.com/in/kyle-jones-2a02b3109/
+
+A) Kernel image location - GRUB loads this from GRUB root
+B) Possibly on VMs LVM for location root file location some may include the UUID on physical devices 
+C)  Instructs the kernel to mount the file system in Read Only mode upon userspace start.
+	- This ensures fsck can check the root file system safely; after the check, the bootup remounts the root filesystem in read-write mode
+D) Tells GRUB not to switch to video mode back to the firmware default before booting the Kernel
+	- vt.handoff=7 - another parameter, not in this example - causes the kernel to maintain the current contents of video memory on virtual terminal 7
+	- Reference: boot - What is vt.handoff=7 parameter in grub.cfg? - Ask Ubuntu
+E) Insert grub module. - reference insmod(8) - Linux manual page (man7.org)
+F) initrd specifies the the file for the initial RAM filesystem
+G) Tuned power settings
+
+
+
+
+
+@@Managing and understanding the boot procedure
+###Understanding Systemd targets
+- emergency.target
+	- Min units are started, enough to fix the system when something is seriously wrong. 
+- Rescue.target
+	- Starts all units that are required to get a afully operation system running.
+- multi.user.target
+	- Starts everything needed for a system to start w/o gui
+- graphical.target
+	- Starts everything with gui
+###Understanding Wants
+- Dependencies needed when starting a specific target.
+isolating targets
+- systemctl --type=target
+- systemctl --type=target --all
+- poweroff.target - runlevel 0
+- rescue.target runlevel 1
+- multi-user.target - runlevel 3
+- graphical.target runlevel 5
+- reboot.target - runlevel 6
+
+@@Working with GRUB2@@@
+#####Understanding GRUB 2
+- Makes sure you can boot Linux
+	- Installed on the boot sector of your HD. Configured to load a Linux Kernel and initramfs
+	- Kernel is the heart of the OS allow using to interact with the HW
+	- initramfs contains drivers that are needed to stat your server. Contains a   file system that is mounted at boot. In it there are kernel modules that are needed during the rest of the boot process
+- To make changes you can edit /etc/default/grub
+understanding grub configuration files
+- BIOS
+	- name of file is /boot/grub2
+- UEFI
+	- name of the file is /boot/efi/EFI/redhat
+- To get the full kernel messages remove rhgb and quiet line from GRUB_CMDLINE_LINUX
+- Understand kernel boot argments
+	- man 7 bootparm
+- grub2-mkconfig -o /boot/grub2/grub.cfg - BIOS
+- grub2-mkconfig -o /boot/efi/EFI/redhat/grubconfig.cfg
+---
+
+
+@@@Essential Troubleshooting Skills
+####Understanding the RHEL 8 Boot procedure
+1. Performing POST -
+2. Selecting the bootable device
+3. Loading the boot loard aka GRUB
+4. Loading the kernel
+	1. Loaded together with inittramfs
+5. Starting /sbin/init
+	1. Linked to systemd
+6. processing initrd.target
+	1. systemd processes excutes all units from initrd.target
+7. Switching to root
+8. Running default target
+
+
+####Starting a troubleshooting target
+- rd.break
+	- Useful if you forgot the root password.
+- init=/bin/sh or init=/bin.bash
+	- Shell should be started after loading kernel and initrd.
+- systemd.unit=emergency.target
+	- Bare min to bring system up for tshooing
+- systemd.unit=rescue.target 
+	- more complete operational mode
+Using a Rescue Disk
+- chroot /mnt/sysimage
+Reinstalling grub from a rescue disk
+- To reinstall GRUB try this method
+	- First us chroot /mnt/sysimage
+	- RUn grub2-install 
+Re-creating the initramfs using a rescue disk
+- If inittramfs is damaged you can repair it by booting to rescue environment and use dracut
+	- dracut - will rebuild initramfs
+	- Also a config file /etc/dracut.conf
+		- /usr/lib/dracut/dracut.conf.d/* - contains the system default configuration
+		- /etc/dracut.conf.d - cuustom config 
+		- /etc/dracut.conf - master configue
+    
+    
+#####Fixing Common issue
+1. Reinstalling GRUB 2
+	1. grub2-install using rescue disk
+2. Fixing initramfs
+	1. Run dracut --force on rescue
+3. Recovering a fiile system
+	1. fsck sends the prompt to ask for maintenance password
+	2. use journalctl -xb
+	3. type mount -o remount,rw /
+	4. normally indicates fstab issue
+4. Resetting root password
+	1. add rd.break
+	2. mount -o remount,rw /sysroot
+	3. chroot /sysroot
+	4. passwd
+	5. Create file /.autorelabel 
+	6. load_policy -i
+	7. chcon -t shadow_t /etc/shadow
+5. Recovering access from a virtual machine 
+	1. Kill the vm - virshdestroy <name> find the name using virsh list
+	2. Find disk image /var/lib/libvirt/images or use virsh dumpxml vmname | grep "source file="
+	3. Check thr idks layout using kpartx-a </path>
+	4. mount /dev/mapper/first partition /mnt
+		1. pvs scan to check volumes
+	5. Now that you see the vm imagine activate using vgchange -a y <name of vm>
+	6. Once you have fixed the vm unmount all filesystems
+		1. Remove device files using kpartx -dv /home/location of lab1.img
