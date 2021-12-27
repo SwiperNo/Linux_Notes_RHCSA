@@ -1,0 +1,58 @@
+#Advanced storage management using VDO and LVM
+
+
+#Instal vdo and enable
+sudo dnf install vdo
+sudo dnf list vdo
+sudo systemctl status vdo
+sudo systemctl enable vdo
+
+
+#List available blks to manipulate
+lsblk
+
+
+#Create vdo volume with custom name and device on system nvme storage - logical size will be 100GB
+sudo vdo create --name=vdo_primary --device=/dev/nvme0n2 --vdoLogicalSize=100G
+
+#Check vdo stats to verify creation
+sudo vdostats --hu
+sudo vdstats -verbose /dev/mapper/vdo_primary 
+sudo vdostats -verbose /dev/mapper/vdo_primary 
+sudo vdostats --verbose /dev/mapper/vdo_primary 
+sudo vdostats --verbose /dev/mapper/vdo_primary | grep -B6 'saving percent'
+
+#Create physical volume for vdo disk
+sudo pvcreate /dev/mapper/vdo_primary
+
+#create volume group for vdo 
+sudo vgcreate vg_vd_primary /dev/mapper/vdo_primary
+
+#verify
+sudo vgdisplay vdoprimary
+sudo vgdisplay vdo_primary
+sudo vgdisplay
+
+#Create two logical volumes
+sudo lvcreate -n vdo1 -L 25G vg_vd_primary
+sudo lvcreate -n vdo2 -L 25G vg_vd_primary
+sudo lvs
+sudo vgs
+
+#Make FS type xfs - preping to mount the two logical volumes
+sudo mkfs.xfs -K /dev/vg_vd_primary/vdo1
+sudo mkfs.xfs -K /dev/vg_vd_primary/vdo2
+
+#Verify configuration
+lsblk
+
+
+#Create directory to mount
+sudo mkdir /data
+sudo mkdir /data/v01
+sudo mkdir /data/v02
+lsblk
+
+#Mount file system to system
+sudo mount -o discard /dev/vg_vd_primary/vdo1 /data/v01
+sudo mount -o discard /dev/vg_vd_primary/vdo2 /data/v02
